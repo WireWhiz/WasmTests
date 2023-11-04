@@ -1,0 +1,14 @@
+[package]
+name = "testScript1"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "wasm_crate1"
+path = "testScript1.rs"
+crate-type = ["cdylib"]
+
+[build-dependencies]
+proc-macro2.workspace = true
+syn.workspace = true
+
