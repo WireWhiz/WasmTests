@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use wasmtime::{Config, Engine, SharedMemory, Store, Module, MemoryType, Linker, Caller};
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 mod api_bindings;
 use api_bindings::{WasmPtr, WasmSlice, ComponentInfo};
@@ -45,12 +47,13 @@ fn load_module(path: &str, engine: &Engine) -> Result<Module, String> {
 
 #[derive(Clone)]
 struct BEState {
-    be_state: Arc<BEStateInner>
+    be_state: Arc<BEStateInner>,
+    wasi_ctx: Option<WasiCtx>
 }
 
 struct BEStateInner {
     engine: Engine,
-    memory: SharedMemory
+    memory: SharedMemory,
 }
 
 fn be_print_external(caller: Caller<BEState>, text_ptr: u32, size: u32) {
@@ -61,6 +64,8 @@ fn be_print_external(caller: Caller<BEState>, text_ptr: u32, size: u32) {
 }
 
 fn main() {
+    let use_wasi = true;
+
     let mut engine_config = Config::new();
     engine_config.wasm_threads(true);
     engine_config.wasm_bulk_memory(true);
@@ -69,11 +74,18 @@ fn main() {
     let engine = Engine::new(&engine_config).unwrap();
     let main_memory = SharedMemory::new(&engine, MemoryType::shared(50, 32768)).unwrap();
 
+    let wasi_ctx = if use_wasi {
+        Some(WasiCtxBuilder::new().inherit_stdio().build())
+    } else {
+        None
+    };
+
     let data = BEState{
         be_state: Arc::new(BEStateInner {
             engine: engine.clone(),
             memory: main_memory.clone()
-        })
+        }),
+        wasi_ctx
     };
 
     let mut store1 = Store::new(&engine, data.clone());
@@ -91,6 +103,15 @@ fn main() {
     let mut linker2  = Linker::new(&engine);
     linker2.define(&mut store2, "env", "memory", main_memory.clone()).expect("Could not define memory for store2");
     linker2.func_wrap("BraneEngine", "extern_be_print", be_print_external).unwrap();
+
+    if use_wasi {
+        wasmtime_wasi::add_to_linker(&mut linker1, |s: &mut BEState| {
+            s.wasi_ctx.as_mut().expect("no wasi context")
+        }).expect("Could not add WASI to linker1");
+        wasmtime_wasi::add_to_linker(&mut linker2, |s: &mut BEState| {
+            s.wasi_ctx.as_mut().expect("no wasi context")
+        }).expect("Could not add WASI to linker2");
+    }
 
 
     {
@@ -132,9 +153,6 @@ fn main() {
 
     println!("-----Module 2-----");
     {
-
-
-
         let now = std::time::Instant::now();
         let instance1 = linker2.module(&mut store2, "module2", &module2);
         if instance1.is_err() {
