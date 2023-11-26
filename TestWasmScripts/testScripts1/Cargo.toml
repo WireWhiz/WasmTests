@@ -12,3 +12,6 @@ crate-type = ["cdylib"]
 proc-macro2.workspace = true
 syn.workspace = true
 
+[dependencies]
+memoffset.workspace = true
+

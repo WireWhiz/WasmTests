@@ -64,7 +64,7 @@ fn be_print_external(caller: Caller<BEState>, text_ptr: u32, size: u32) {
 }
 
 fn main() {
-    let use_wasi = true;
+    let use_wasi = false;
 
     let mut engine_config = Config::new();
     engine_config.wasm_threads(true);
@@ -154,7 +154,7 @@ fn main() {
     println!("-----Module 2-----");
     {
         let now = std::time::Instant::now();
-        let instance1 = linker2.module(&mut store2, "module2", &module2);
+        let instance1 = linker1.module(&mut store1, "module2", &module2);
         if instance1.is_err() {
             println!("Was unable to instantiate module2: {:?}", instance1.err().unwrap());
             return;
@@ -162,6 +162,13 @@ fn main() {
         instance1.expect("Couldn't instantiate module2");
         let instanceInstantiationTime = now.elapsed();
         println!("Instance2 instantiation time: {:?}", instanceInstantiationTime);
+
+        let instance2 = linker2.module(&mut store2, "module2", &module2);
+        if instance2.is_err() {
+            println!("Was unable to instantiate module2: {:?}", instance2.err().unwrap());
+            return;
+        }
+        instance2.expect("Couldn't instantiate module2");
 
         println!("Imports");
         let imports = module2.imports();
